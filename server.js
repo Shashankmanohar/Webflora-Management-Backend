@@ -26,8 +26,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Admin routes
-app.use('/', (req, res) => {
+// Health check / Root route
+app.get('/', (req, res) => {
     res.send('Hello From Backend!');
 });
 app.use('/api/admin', adminRoutes);

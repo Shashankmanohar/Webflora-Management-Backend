@@ -25,9 +25,9 @@ app.use(cors({
 app.use(express.json());
 
 // Admin routes
-// app.use('/', (req, res) => {
-//     res.send('Hello From Backend!');
-// });
+app.use('/', (req, res) => {
+    res.send('Hello From Backend!');
+});
 app.use('/api/admin', adminRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/communication', communicationRoutes);

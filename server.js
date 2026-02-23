@@ -13,13 +13,14 @@ import invoiceRoute from './route/invoiceRoute.js';
 import projectRoute from './route/projectRoute.js';
 import handoverRoute from './route/handoverRoute.js';
 import salaryRoute from './route/salaryRoute.js';
+import authRoutes from './route/authRoute.js';
 dotenv.config();
 
 const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173', 'https://webflora-management-frontend.vercel.app'],
+    origin: ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -41,6 +42,7 @@ app.use('/api/invoice', invoiceRoute);
 app.use('/api/project', projectRoute);
 app.use('/api/handover', handoverRoute);
 app.use('/api/salary', salaryRoute);
+app.use('/api/auth', authRoutes);
 
 
 // Connect to MongoDB

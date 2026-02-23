@@ -1,6 +1,6 @@
-# WebFlora Management - Backend
+# Webflora Management - Backend
 
-This repository contains the backend server for WebFlora Management.
+This repository contains the backend server for Webflora Management.
 
 ## Setup
 1. Run `npm install`

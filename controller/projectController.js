@@ -26,7 +26,11 @@ const Addproject = async (req, res) => {
 
         res.status(201).json({
             message: "Project created successfully",
-            project: newProject
+            project: {
+                ...newProject.toObject(),
+                totalPaid: 0,
+                dueAmount: newProject.totalAmount
+            }
         });
 
     } catch (error) {
@@ -99,9 +103,16 @@ const updateProject = async (req, res) => {
             return res.status(404).json({ message: "Project not found" });
         }
 
+        const invoices = await invoiceModel.find({ projectId: project._id });
+        const totalPaid = invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+
         res.status(200).json({
             message: "Project updated successfully",
-            project
+            project: {
+                ...project.toObject(),
+                totalPaid,
+                dueAmount: project.totalAmount - totalPaid
+            }
         });
     } catch (error) {
         res.status(500).json({ message: "Failed to update project", error: error.message });

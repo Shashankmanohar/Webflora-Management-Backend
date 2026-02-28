@@ -80,6 +80,7 @@ const forgotPassword = async (req, res) => {
         }
 
         const logoPath = path.join(__dirname, "../../frontend/public/webfloralogo.png");
+        const blackLogoPath = path.join(__dirname, "../../frontend/public/Blacktextlogo.jpeg");
 
         const mailOptions = {
             from: `"Webflora Support" <${process.env.EMAIL_USER}>`,
@@ -88,7 +89,10 @@ const forgotPassword = async (req, res) => {
             html: `
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; color: #333;">
                     <div style="background-color: #f8f9fa; padding: 30px; text-align: center; border-bottom: 2px solid #5e72e4;">
-                        <img src="cid:webfloralogo" alt="Webflora Logo" style="max-height: 80px; margin-bottom: 15px;">
+                        <img src="cid:webfloralogo" alt="Webflora Logo" style="max-height: 80px; margin-bottom: 10px;">
+                        <div style="margin-bottom: 15px;">
+                            <img src="cid:blacktextlogo" alt="Webflora Text Logo" style="max-height: 40px;">
+                        </div>
                         <h2 style="margin: 0; color: #2c3e50; font-size: 24px;">Verification Code</h2>
                     </div>
                     <div style="padding: 40px 30px; background-color: #ffffff; text-align: center;">
@@ -109,11 +113,18 @@ const forgotPassword = async (req, res) => {
                     </div>
                 </div>
             `,
-            attachments: [{
-                filename: 'webfloralogo.png',
-                path: logoPath,
-                cid: 'webfloralogo'
-            }]
+            attachments: [
+                {
+                    filename: 'webfloralogo.png',
+                    path: logoPath,
+                    cid: 'webfloralogo'
+                },
+                {
+                    filename: 'Blacktextlogo.jpeg',
+                    path: blackLogoPath,
+                    cid: 'blacktextlogo'
+                }
+            ]
         };
 
         try {

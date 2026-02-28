@@ -1,5 +1,7 @@
 import invoiceModel from "../model/invoiceModel.js";
 import projectModel from "../model/projectModel.js";
+import Counter from "../model/counterModel.js";
+
 
 // Add Invoice
 const AddInvoice = async (req, res) => {
@@ -16,11 +18,22 @@ const AddInvoice = async (req, res) => {
             status
         } = req.body;
 
-        if (!clientId || !projectId || !referenceNo || !invoiceNo || !amount || !method) {
+        if (!clientId || !projectId || !referenceNo || !amount || !method) {
             return res.status(400).json({ message: "Required fields are missing" });
         }
 
-        const existingInvoice = await invoiceModel.findOne({ invoiceNo });
+        let invNo = invoiceNo;
+        if (!invNo) {
+            const year = new Date().getFullYear();
+            const counter = await Counter.findOneAndUpdate(
+                { id: `invoiceNumber-${year}` },
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+            invNo = `WT-INV-${year}-${String(counter.seq).padStart(4, '0')}`;
+        }
+
+        const existingInvoice = await invoiceModel.findOne({ invoiceNo: invNo });
         if (existingInvoice) {
             return res.status(409).json({ message: "Invoice already exists!" });
         }
@@ -41,23 +54,64 @@ const AddInvoice = async (req, res) => {
             });
         }
 
+        // Calculate previous due for the client across other projects
+        // Previous due = Sum of all (Project Total - Invoiced Amount) for other projects
+        const otherClientProjects = await projectModel.find({ client: clientId, _id: { $ne: projectId } });
+        let totalClientDue = 0;
+        let dueBreakdown = [];
+        for (const p of otherClientProjects) {
+            const projectInvoices = await invoiceModel.find({ projectId: p._id });
+            const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+            const remaining = Math.max(0, p.totalAmount - totalInvoiced);
+            if (remaining > 0) {
+                totalClientDue += remaining;
+                dueBreakdown.push({
+                    projectName: p.projectName,
+                    amount: remaining
+                });
+            }
+        }
+
         const newInvoice = new invoiceModel({
             clientId,
             projectId,
             referenceNo,
-            invoiceNo,
+            invoiceNo: invNo,
             amount: Number(amount),
             description,
             method,
             date,
-            status
+            status,
+            previousDue: totalClientDue,
+            dueBreakdown: dueBreakdown
         });
 
         await newInvoice.save();
 
+        // Populate and calculate financials for the response
+        const populatedInvoice = await invoiceModel.findById(newInvoice._id)
+            .populate("clientId")
+            .populate("projectId");
+
+        if (populatedInvoice.projectId && typeof populatedInvoice.projectId === 'object') {
+            const projectInvoices = await invoiceModel.find({ projectId: populatedInvoice.projectId._id });
+            const totalPaidProject = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+            populatedInvoice.projectId = {
+                ...populatedInvoice.projectId.toObject(),
+                totalPaid: totalPaidProject,
+                dueAmount: populatedInvoice.projectId.totalAmount - totalPaidProject
+            };
+        }
+
         res.status(201).json({
             message: "Invoice created successfully",
-            invoice: newInvoice
+            invoice: {
+                ...populatedInvoice.toObject(),
+                id: populatedInvoice._id,
+                number: populatedInvoice.invoiceNo,
+                total: populatedInvoice.amount,
+                grandTotal: populatedInvoice.amount + (populatedInvoice.previousDue || 0)
+            }
         });
 
     } catch (error) {
@@ -75,7 +129,19 @@ const getInvoicesByProject = async (req, res) => {
             .populate("clientId")
             .populate("projectId");
 
-        res.status(200).json({ invoices });
+        const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            return {
+                ...inv.toObject(),
+                clientName: inv.clientId?.clientName || "Unknown",
+                projectName: inv.projectId?.projectName || "Unknown",
+                id: inv._id,
+                number: inv.invoiceNo,
+                total: inv.amount,
+                grandTotal: inv.amount + (inv.previousDue || 0)
+            };
+        }));
+
+        res.status(200).json({ invoices: invoicesWithTotals });
     } catch (error) {
         res.status(500).json({ message: "Failed to get invoices", error: error.message });
     }
@@ -95,7 +161,19 @@ const getInvoice = async (req, res) => {
             return res.status(404).json({ message: "No invoices found!" });
         }
 
-        res.status(200).json({ invoices });
+        const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            return {
+                ...inv.toObject(),
+                clientName: inv.clientId?.clientName || "Unknown",
+                projectName: inv.projectId?.projectName || "Unknown",
+                id: inv._id,
+                number: inv.invoiceNo,
+                total: inv.amount,
+                grandTotal: inv.amount + (inv.previousDue || 0)
+            };
+        }));
+
+        res.status(200).json({ invoices: invoicesWithTotals });
 
     } catch (error) {
         res.status(500).json({ message: "Failed to get invoices", error: error.message });
@@ -106,12 +184,24 @@ const getInvoice = async (req, res) => {
 // Get all invoices
 const getAllInvoice = async (req, res) => {
     try {
-        const invoice = await invoiceModel
+        const invoices = await invoiceModel
             .find()
             .populate("clientId")
             .populate("projectId");
 
-        res.status(200).json({ invoice });
+        const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            return {
+                ...inv.toObject(),
+                clientName: inv.clientId?.clientName || "Unknown",
+                projectName: inv.projectId?.projectName || "Unknown",
+                id: inv._id,
+                number: inv.invoiceNo,
+                total: inv.amount,
+                grandTotal: inv.amount + (inv.previousDue || 0)
+            };
+        }));
+
+        res.status(200).json({ invoice: invoicesWithTotals });
 
     } catch (error) {
         res.status(500).json({ message: "Failed to get invoices", error: error.message });
@@ -141,6 +231,14 @@ const updateInvoice = async (req, res) => {
             date,
             status
         } = req.body;
+
+        // Check for duplicate invoice number if it's being changed
+        if (invoiceNo && invoiceNo !== invoice.invoiceNo) {
+            const existingWithNewNo = await invoiceModel.findOne({ invoiceNo, _id: { $ne: id } });
+            if (existingWithNewNo) {
+                return res.status(409).json({ message: "Invoice number already exists!" });
+            }
+        }
 
         // Validate amount if updated
         const targetProjectId = newProjectId || invoice.projectId;
@@ -175,9 +273,30 @@ const updateInvoice = async (req, res) => {
 
         await invoice.save();
 
+        // Populate and calculate financials for the response
+        const populatedInvoice = await invoiceModel.findById(invoice._id)
+            .populate("clientId")
+            .populate("projectId");
+
+        if (populatedInvoice.projectId && typeof populatedInvoice.projectId === 'object') {
+            const projectInvoices = await invoiceModel.find({ projectId: populatedInvoice.projectId._id });
+            const totalPaidProject = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+            populatedInvoice.projectId = {
+                ...populatedInvoice.projectId.toObject(),
+                totalPaid: totalPaidProject,
+                dueAmount: populatedInvoice.projectId.totalAmount - totalPaidProject
+            };
+        }
+
         res.status(200).json({
             message: "Invoice updated successfully",
-            invoice
+            invoice: {
+                ...populatedInvoice.toObject(),
+                id: populatedInvoice._id,
+                number: populatedInvoice.invoiceNo,
+                total: populatedInvoice.amount,
+                grandTotal: populatedInvoice.amount + (populatedInvoice.previousDue || 0)
+            }
         });
 
     } catch (error) {
@@ -197,9 +316,34 @@ const deleteInvoice = async (req, res) => {
             return res.status(404).json({ message: "Invoice not found!" });
         }
 
+        // For delete, return the updated project balance too
+        const project = await projectModel.findById(invoice.projectId);
+        let projectSummary = null;
+        if (project) {
+            const projectInvoices = await invoiceModel.find({ projectId: project._id });
+            const totalPaid = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+            projectSummary = {
+                ...project.toObject(),
+                totalPaid,
+                dueAmount: project.totalAmount - totalPaid
+            };
+        }
+
+        // Calculate totalDue for the client (Sum of all projects' remaining budget)
+        let clientTotalDue = 0;
+        if (invoice.clientId) {
+            const allClientProjects = await projectModel.find({ client: invoice.clientId });
+            for (const p of allClientProjects) {
+                const projectInvoices = await invoiceModel.find({ projectId: p._id });
+                const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+                clientTotalDue += (Math.max(0, p.totalAmount - totalInvoiced));
+            }
+        }
+
         res.status(200).json({
             message: "Invoice deleted successfully",
-            invoice
+            invoice,
+            project: projectSummary
         });
 
     } catch (error) {

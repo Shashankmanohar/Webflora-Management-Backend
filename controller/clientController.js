@@ -1,12 +1,24 @@
 import Client from "../model/clientModel.js";
+import Counter from "../model/counterModel.js";
+
 
 // Add Client
 const Addclients = async (req, res) => {
     try {
         const { clientName, contactNumber, email, address, referenceNo } = req.body;
 
-        if (!clientName || !contactNumber || !email || !address || !referenceNo) {
+        if (!clientName || !contactNumber || !email || !address) {
             return res.status(400).json({ message: "All fields are required" });
+        }
+
+        let refNo = referenceNo;
+        if (!refNo) {
+            const counter = await Counter.findOneAndUpdate(
+                { id: "clientReference" },
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+            refNo = `WT-REF-${String(counter.seq).padStart(4, '0')}`;
         }
 
         const existingClient = await Client.findOne({
@@ -22,7 +34,7 @@ const Addclients = async (req, res) => {
             contactNumber,
             email,
             address,
-            referenceNo
+            referenceNo: refNo
         });
 
         await newClient.save();
@@ -39,11 +51,30 @@ const Addclients = async (req, res) => {
 };
 
 
-// Get All Clients
+// Get All Clients with financial summary
 const getAllClient = async (req, res) => {
     try {
         const clients = await Client.find();
-        res.status(200).json({ clients });
+        const projectModel = (await import("../model/projectModel.js")).default;
+        const invoiceModel = (await import("../model/invoiceModel.js")).default;
+
+        const clientsWithFinancials = await Promise.all(clients.map(async (client) => {
+            const projects = await projectModel.find({ client: client._id });
+            let totalDue = 0;
+            // totalDue is the sum of (Project Total - Invoiced Amount) for all client projects
+            for (const p of projects) {
+                const invoicesForProject = await invoiceModel.find({ projectId: p._id });
+                const totalInvoiced = invoicesForProject.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+                totalDue += (Math.max(0, p.totalAmount - totalInvoiced));
+            }
+
+            return {
+                ...client.toObject(),
+                totalDue
+            };
+        }));
+
+        res.status(200).json({ clients: clientsWithFinancials });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Failed to get clients", error: error.message });

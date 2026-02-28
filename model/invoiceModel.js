@@ -38,7 +38,17 @@ const invoiceSchema = new mongoose.Schema({
         type: String,
         enum: ["pending", "paid", "overdue"],
         default: "pending"
-    }
+    },
+    previousDue: {
+        type: Number,
+        default: 0
+    },
+    dueBreakdown: [
+        {
+            projectName: String,
+            amount: Number
+        }
+    ]
 
 })
 

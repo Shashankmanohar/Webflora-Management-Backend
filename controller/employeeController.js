@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import Salary from "../model/salaryModel.js";
+import { sendWelcomeEmail } from "../utils/emailService.js";
 
 // Create employee
 const createEmployee = async (req, res) => {
@@ -29,6 +30,9 @@ const createEmployee = async (req, res) => {
             name, email, password: hashedPassword, role, phone, address, salary
         });
         await newEmployee.save();
+
+        // Send welcome email
+        await sendWelcomeEmail(email, password, name, role);
 
         const { _id, createdAt, updatedAt } = newEmployee;
         res.status(201).json({

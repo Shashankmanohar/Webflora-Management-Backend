@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import Salary from "../model/salaryModel.js";
+import { sendWelcomeEmail } from "../utils/emailService.js";
 
 // -----------------------------------------------
 // Admin - Add Intern
@@ -54,6 +55,9 @@ const Addintern = async (req, res) => {
     });
 
     await newIntern.save();
+
+    // Send welcome email
+    await sendWelcomeEmail(email, password, name, "intern");
 
     return res.status(201).json({
       message: "Intern created successfully",

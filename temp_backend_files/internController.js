@@ -57,13 +57,7 @@ const Addintern = async (req, res) => {
     await newIntern.save();
 
     // Send welcome email
-    console.log(`Attempting to send welcome email to ${email}...`);
-    const emailResult = await sendWelcomeEmail(email, password, name, "intern");
-    if (emailResult.success) {
-        console.log(`Welcome email delivered to ${email}`);
-    } else {
-        console.error(`Failed to deliver welcome email to ${email}:`, emailResult.error);
-    }
+    await sendWelcomeEmail(email, password, name, "intern");
 
     return res.status(201).json({
       message: "Intern created successfully",

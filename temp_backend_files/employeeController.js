@@ -32,13 +32,7 @@ const createEmployee = async (req, res) => {
         await newEmployee.save();
 
         // Send welcome email
-        console.log(`Attempting to send welcome email to ${email}...`);
-        const emailResult = await sendWelcomeEmail(email, password, name, role);
-        if (emailResult.success) {
-            console.log(`Welcome email delivered to ${email}`);
-        } else {
-            console.error(`Failed to deliver welcome email to ${email}:`, emailResult.error);
-        }
+        await sendWelcomeEmail(email, password, name, role);
 
         const { _id, createdAt, updatedAt } = newEmployee;
         res.status(201).json({

@@ -30,6 +30,14 @@ const invoiceSchema = new mongoose.Schema({
         default: "",
     },
     method: { type: String, enum: ["Cash", "UPI", "Bank Transfer", "Card", "Cheque"], required: true },
+    items: {
+        type: [{
+            service: String,
+            units: String,
+            price: Number
+        }],
+        default: []
+    },
     date: {
         type: Date,
         default: Date.now

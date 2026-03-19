@@ -15,7 +15,8 @@ const AddInvoice = async (req, res) => {
             description,
             method,
             date,
-            status
+            status,
+            items
         } = req.body;
 
         if (!clientId || !projectId || !referenceNo || !amount || !method) {
@@ -80,6 +81,7 @@ const AddInvoice = async (req, res) => {
             amount: Number(amount),
             description,
             method,
+            items: items || [],
             date,
             status,
             previousDue: totalClientDue,
@@ -229,7 +231,8 @@ const updateInvoice = async (req, res) => {
             description,
             method,
             date,
-            status
+            status,
+            items
         } = req.body;
 
         // Check for duplicate invoice number if it's being changed
@@ -266,8 +269,9 @@ const updateInvoice = async (req, res) => {
         invoice.referenceNo = referenceNo || invoice.referenceNo;
         invoice.invoiceNo = invoiceNo || invoice.invoiceNo;
         invoice.amount = newAmount !== undefined ? Number(newAmount) : invoice.amount;
-        invoice.description = description || invoice.description;
+        invoice.description = description !== undefined ? description : invoice.description;
         invoice.method = method || invoice.method;
+        invoice.items = items !== undefined ? items : invoice.items;
         invoice.date = date || invoice.date;
         invoice.status = status || invoice.status;
 

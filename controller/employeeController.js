@@ -47,8 +47,12 @@ const createEmployee = async (req, res) => {
         });
 
     } catch (error) {
+        console.error("Error in createEmployee:", error);
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map(val => val.message);
+            return res.status(400).json({ message: messages.join(', ') });
+        }
         res.status(500).json({ message: "Failed to create employee", error: error.message });
-        console.error(error);
     }
 };
 

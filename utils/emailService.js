@@ -83,7 +83,7 @@ export const sendHandoverEmail = async (data) => {
         });
 
         const frontendUrl = 'https://webflora-management-frontend.vercel.app';
-        const formattedDeadline = deadline ? new Date(deadline).toLocaleDateString('en-US', { dateStyle: 'long' }) : 'Flexible';
+        const formattedDeadline = deadline ? new Date(deadline).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Flexible';
         
         const mailOptions = {
             from: `"Webflora Projects" <${process.env.EMAIL_USER}>`,

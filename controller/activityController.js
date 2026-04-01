@@ -27,7 +27,8 @@ const logActivity = async (req, res) => {
             userName: user?.name || "Unknown",
             date,
             content,
-            projectId,
+            projectId: projectId === 'none' ? undefined : projectId,
+            image: req.file ? req.file.path : undefined,
             loggedAt: new Date()
         });
 
@@ -87,6 +88,11 @@ const updateActivity = async (req, res) => {
         }
 
         activity.content = content || activity.content;
+        
+        if (req.file) {
+            activity.image = req.file.path;
+        }
+        
         await activity.save();
 
         res.status(200).json({ message: "Activity updated successfully", activity });

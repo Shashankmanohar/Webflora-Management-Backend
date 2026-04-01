@@ -28,6 +28,10 @@ const activitySchema = new mongoose.Schema({
         ref: 'project',
         required: false
     },
+    image: {
+        type: String,
+        required: false
+    },
     loggedAt: {
         type: Date,
         default: Date.now

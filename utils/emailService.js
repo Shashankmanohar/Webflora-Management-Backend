@@ -11,6 +11,11 @@ dotenv.config();
  */
 export const sendWelcomeEmail = async (email, password, name, role) => {
     try {
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+            console.error('Email credentials missing from environment!');
+            return { success: false, error: 'Email credentials not configured' };
+        }
+
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {

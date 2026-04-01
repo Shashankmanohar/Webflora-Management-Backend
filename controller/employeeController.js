@@ -31,14 +31,14 @@ const createEmployee = async (req, res) => {
         });
         await newEmployee.save();
 
-        // Send welcome email
-        console.log(`Attempting to send welcome email to ${email}...`);
-        const emailResult = await sendWelcomeEmail(email, password, name, role);
-        if (emailResult.success) {
-            console.log(`Welcome email delivered to ${email}`);
-        } else {
-            console.error(`Failed to deliver welcome email to ${email}:`, emailResult.error);
-        }
+        // Send welcome email in background (Do not await to avoid Vercel timeouts)
+        console.log(`Queueing welcome email for ${email}...`);
+        sendWelcomeEmail(email, password, name, role)
+            .then(result => {
+                if (result.success) console.log(`Welcome email delivered to ${email}`);
+                else console.error(`Failed to deliver welcome email to ${email}:`, result.error);
+            })
+            .catch(err => console.error("Email background error:", err));
 
         const { _id, createdAt, updatedAt } = newEmployee;
         res.status(201).json({

@@ -35,6 +35,7 @@ const logActivity = async (req, res) => {
         await newActivity.save();
         res.status(201).json({ message: "Activity logged successfully", activity: newActivity });
     } catch (error) {
+        console.error("Error in logActivity:", error);
         res.status(500).json({ message: "Failed to log activity", error: error.message });
     }
 };
@@ -97,6 +98,7 @@ const updateActivity = async (req, res) => {
 
         res.status(200).json({ message: "Activity updated successfully", activity });
     } catch (error) {
+        console.error("Error in updateActivity:", error);
         res.status(500).json({ message: "Failed to update activity", error: error.message });
     }
 };

@@ -6,7 +6,8 @@ import {
     getAllIntern,
     getInternById,
     updateIntern,
-    deleteIntern
+    deleteIntern,
+    listInterns
 } from "../controller/internController.js";
 
 const router = express.Router();
@@ -25,6 +26,9 @@ router.get("/me", authMiddleware(['intern']), (req, res, next) => {
 
 // Get All Interns (Admin Only)
 router.get("/", authMiddleware(["admin"]), getAllIntern);
+
+// List interns (All staff)
+router.get("/list", authMiddleware(['admin', 'employee', 'intern']), listInterns);
 
 // Update Intern (Admin Only)
 router.put("/update/:id", authMiddleware(["admin"]), updateIntern);

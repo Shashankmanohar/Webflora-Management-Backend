@@ -1,4 +1,5 @@
 import Handover from "../model/handoverModel.js";
+import { sendHandoverEmail } from "../utils/emailService.js";
 
 // Create Handover
 export const createHandover = async (req, res) => {
@@ -22,6 +23,27 @@ export const createHandover = async (req, res) => {
         });
 
         await newHandover.save();
+
+        // Send Email Notification
+        try {
+            const populatedHandover = await Handover.findById(newHandover._id)
+                .populate("projectId", "projectName")
+                .populate("assigneeId", "name email");
+
+            if (populatedHandover && populatedHandover.assigneeId && populatedHandover.assigneeId.email) {
+                await sendHandoverEmail({
+                    email: populatedHandover.assigneeId.email,
+                    name: populatedHandover.assigneeId.name,
+                    projectTitle: populatedHandover.projectId.projectName,
+                    deadline: populatedHandover.deadline,
+                    instructions: populatedHandover.instructions
+                });
+            }
+        } catch (emailError) {
+            console.error("Failed to send handover email:", emailError);
+            // We don't want to fail the whole request if only the email fails
+        }
+
         res.status(201).json({ message: "Handover created successfully", handover: newHandover });
     } catch (error) {
         console.error("Error creating handover:", error);

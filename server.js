@@ -14,6 +14,8 @@ import projectRoute from './route/projectRoute.js';
 import handoverRoute from './route/handoverRoute.js';
 import salaryRoute from './route/salaryRoute.js';
 import authRoutes from './route/authRoute.js';
+import reportRoutes from './route/reportRoute.js';
+import activityRoutes from './route/activityRoute.js';
 dotenv.config();
 
 const app = express();
@@ -43,6 +45,8 @@ app.use('/api/project', projectRoute);
 app.use('/api/handover', handoverRoute);
 app.use('/api/salary', salaryRoute);
 app.use('/api/auth', authRoutes);
+app.use('/api/report', reportRoutes);
+app.use('/api/activity', activityRoutes);
 
 
 // Connect to MongoDB

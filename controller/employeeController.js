@@ -213,4 +213,14 @@ const getEmployeeById = async (req, res) => {
     }
 };
 
-export { createEmployee, loginEmployee, getEmployee, getEmployeeById, updateEmployee, deleteEmployee };
+// List employees (Lightweight for selection)
+const listEmployees = async (req, res) => {
+    try {
+        const employees = await Employee.find({}, 'name role _id').lean();
+        res.status(200).json({ employees });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to list employees", error: error.message });
+    }
+};
+
+export { createEmployee, loginEmployee, getEmployee, getEmployeeById, updateEmployee, deleteEmployee, listEmployees };

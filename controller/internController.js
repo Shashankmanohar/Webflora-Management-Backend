@@ -282,4 +282,14 @@ const getInternById = async (req, res) => {
   }
 };
 
-export { Addintern, LoginIntern, getAllIntern, getInternById, updateIntern, deleteIntern };
+// List interns (Lightweight for selection)
+const listInterns = async (req, res) => {
+    try {
+        const interns = await Intern.find({}, 'name role _id').lean();
+        res.status(200).json({ interns });
+    } catch (error) {
+        res.status(500).json({ message: "Failed to list interns", error: error.message });
+    }
+};
+
+export { Addintern, LoginIntern, getAllIntern, getInternById, updateIntern, deleteIntern, listInterns };

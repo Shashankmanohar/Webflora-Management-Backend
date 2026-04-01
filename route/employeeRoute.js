@@ -5,7 +5,8 @@ import {
   getEmployee,
   getEmployeeById,
   deleteEmployee,
-  updateEmployee
+  updateEmployee,
+  listEmployees
 } from "../controller/employeeController.js";
 import authMiddleware from "../middleware/auth.js";
 
@@ -25,6 +26,9 @@ router.get("/me", authMiddleware(['employee']), (req, res, next) => {
 
 // Get all employees (Admin only)
 router.get("/", authMiddleware(['admin']), getEmployee);
+
+// List employees (All staff)
+router.get("/list", authMiddleware(['admin', 'employee', 'intern']), listEmployees);
 
 // Update employee by ID (Admin only)
 router.put("/:id", authMiddleware(['admin']), updateEmployee);

@@ -7,11 +7,74 @@ import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from 'url';
+import jwt from "jsonwebtoken";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+
+// Unified Global Login
+const unifiedLogin = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ message: "Email and password are required" });
+        }
+
+        let user = null;
+        let role = "";
+
+        // 1. Try Admin
+        user = await Admin.findOne({ email });
+        if (user) role = "admin";
+
+        // 2. Try Employee
+        if (!user) {
+            user = await Employee.findOne({ email });
+            if (user) role = "employee";
+        }
+
+        // 3. Try Intern
+        if (!user) {
+            user = await Intern.findOne({ email });
+            if (user) role = "intern";
+        }
+
+        if (!user) {
+            return res.status(404).json({ message: "No account found with this email" });
+        }
+
+        // Verify password
+        const isPasswordCorrect = await bcrypt.compare(password, user.password);
+        if (!isPasswordCorrect) {
+            return res.status(401).json({ message: "Invalid password" });
+        }
+
+        // Generate token
+        const token = jwt.sign(
+            { id: user._id, role: user.role || role }, 
+            process.env.JWT_SECRET, 
+            { expiresIn: "12h" }
+        );
+
+        res.status(200).json({ 
+            message: "Login successful", 
+            token,
+            user: { 
+                id: user._id, 
+                name: user.name, 
+                email: user.email, 
+                role: user.role || role 
+            }
+        });
+
+    } catch (error) {
+        console.error("Unified Login Error:", error);
+        res.status(500).json({ message: "Internal server error during login", error: error.message });
+    }
+};
 
 // Helper to create transporter only when needed
 const getTransporter = () => {
@@ -202,4 +265,4 @@ const resetPassword = async (req, res) => {
     }
 };
 
-export { forgotPassword, verifyOTP, resetPassword };
+export { forgotPassword, verifyOTP, resetPassword, unifiedLogin };

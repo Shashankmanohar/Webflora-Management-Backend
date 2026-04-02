@@ -16,6 +16,7 @@ import salaryRoute from './route/salaryRoute.js';
 import authRoutes from './route/authRoute.js';
 import reportRoutes from './route/reportRoute.js';
 import activityRoutes from './route/activityRoute.js';
+import expenseRoutes from './route/expenseRoute.js';
 dotenv.config();
 
 const app = express();
@@ -47,6 +48,7 @@ app.use('/api/salary', salaryRoute);
 app.use('/api/auth', authRoutes);
 app.use('/api/report', reportRoutes);
 app.use('/api/activity', activityRoutes);
+app.use('/api/expense', expenseRoutes);
 
 
 // Connect to MongoDB

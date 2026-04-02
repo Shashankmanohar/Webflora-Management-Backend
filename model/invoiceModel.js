@@ -6,11 +6,15 @@ const invoiceSchema = new mongoose.Schema({
         ref: "client",
         required: true,
     },
-    projectId: {
+    projectIds: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "project",
         required: true,
-    },
+    }],
+    selectedDues: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "project",
+    }],
     referenceNo: {
         type: String,
         required: true,

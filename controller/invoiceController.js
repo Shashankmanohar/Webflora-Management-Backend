@@ -8,7 +8,8 @@ const AddInvoice = async (req, res) => {
     try {
         const {
             clientId,
-            projectId,
+            projectIds, // Array of IDs
+            selectedDues, // Array of IDs
             referenceNo,
             invoiceNo,
             amount,
@@ -19,7 +20,7 @@ const AddInvoice = async (req, res) => {
             items
         } = req.body;
 
-        if (!clientId || !projectId || !referenceNo || !amount || !method) {
+        if (!clientId || !projectIds || !Array.isArray(projectIds) || projectIds.length === 0 || !referenceNo || !amount || !method) {
             return res.status(400).json({ message: "Required fields are missing" });
         }
 
@@ -39,29 +40,43 @@ const AddInvoice = async (req, res) => {
             return res.status(409).json({ message: "Invoice already exists!" });
         }
 
-        // Validate amount against project budget
-        const project = await projectModel.findById(projectId);
-        if (!project) {
-            return res.status(404).json({ message: "Project not found" });
+        // Validate amount against combined project budgets
+        const projects = await projectModel.find({ _id: { $in: projectIds } });
+        if (projects.length === 0) {
+            return res.status(404).json({ message: "No valid projects found" });
         }
 
-        const existingInvoices = await invoiceModel.find({ projectId });
+        let totalBudget = projects.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+        const existingInvoices = await invoiceModel.find({ projectIds: { $in: projectIds } });
+        
+        // This is complex because one invoice can span multiple projects. 
+        // For simplicity, we check if total amount of this invoice + past invoices on ANY of these projects 
+        // exceeds the total budget of all these projects combined.
         const totalPaid = existingInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
 
-        if (totalPaid + Number(amount) > project.totalAmount) {
-            const remaining = project.totalAmount - totalPaid;
+        if (totalPaid + Number(amount) > totalBudget) {
+            const remaining = totalBudget - totalPaid;
             return res.status(400).json({
-                message: `Invoice amount exceeds project budget. Remaining budget: ₹${remaining}`
+                message: `Invoice amount exceeds the combined project budget. Remaining budget: ₹${remaining}`
             });
         }
 
-        // Calculate previous due for the client across other projects
-        // Previous due = Sum of all (Project Total - Invoiced Amount) for other projects
-        const otherClientProjects = await projectModel.find({ client: clientId, _id: { $ne: projectId } });
+        // Calculate previous due for the client
+        // If selectedDues is provided, use only those projects
+        // Otherwise, use all other projects of the client
+        let dueQuery = { client: clientId };
+        if (selectedDues && Array.isArray(selectedDues) && selectedDues.length > 0) {
+            dueQuery._id = { $in: selectedDues };
+        } else {
+            dueQuery._id = { $nin: projectIds };
+        }
+
+        const dueProjects = await projectModel.find(dueQuery);
         let totalClientDue = 0;
         let dueBreakdown = [];
-        for (const p of otherClientProjects) {
-            const projectInvoices = await invoiceModel.find({ projectId: p._id });
+        
+        for (const p of dueProjects) {
+            const projectInvoices = await invoiceModel.find({ projectIds: p._id });
             const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
             const remaining = Math.max(0, p.totalAmount - totalInvoiced);
             if (remaining > 0) {
@@ -75,7 +90,8 @@ const AddInvoice = async (req, res) => {
 
         const newInvoice = new invoiceModel({
             clientId,
-            projectId,
+            projectIds,
+            selectedDues: selectedDues || [],
             referenceNo,
             invoiceNo: invNo,
             amount: Number(amount),
@@ -93,17 +109,9 @@ const AddInvoice = async (req, res) => {
         // Populate and calculate financials for the response
         const populatedInvoice = await invoiceModel.findById(newInvoice._id)
             .populate("clientId")
-            .populate("projectId");
+            .populate("projectIds");
 
-        if (populatedInvoice.projectId && typeof populatedInvoice.projectId === 'object') {
-            const projectInvoices = await invoiceModel.find({ projectId: populatedInvoice.projectId._id });
-            const totalPaidProject = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-            populatedInvoice.projectId = {
-                ...populatedInvoice.projectId.toObject(),
-                totalPaid: totalPaidProject,
-                dueAmount: populatedInvoice.projectId.totalAmount - totalPaidProject
-            };
-        }
+        const projectNames = populatedInvoice.projectIds.map(p => p.projectName).join(" & ");
 
         res.status(201).json({
             message: "Invoice created successfully",
@@ -111,6 +119,7 @@ const AddInvoice = async (req, res) => {
                 ...populatedInvoice.toObject(),
                 id: populatedInvoice._id,
                 number: populatedInvoice.invoiceNo,
+                projectName: projectNames,
                 total: populatedInvoice.amount,
                 grandTotal: populatedInvoice.amount + (populatedInvoice.previousDue || 0)
             }
@@ -127,15 +136,15 @@ const getInvoicesByProject = async (req, res) => {
     try {
         const { projectId } = req.params;
         const invoices = await invoiceModel
-            .find({ projectId })
+            .find({ projectIds: projectId })
             .populate("clientId")
-            .populate("projectId");
+            .populate("projectIds");
 
         const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "Unknown",
-                projectName: inv.projectId?.projectName || "Unknown",
+                projectName: inv.projectIds?.map(p => p.projectName).join(" & ") || "Unknown",
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: inv.amount,
@@ -157,7 +166,7 @@ const getInvoice = async (req, res) => {
         const invoices = await invoiceModel
             .find({ referenceNo })
             .populate("clientId")
-            .populate("projectId");
+            .populate("projectIds");
 
         if (!invoices || invoices.length === 0) {
             return res.status(404).json({ message: "No invoices found!" });
@@ -167,7 +176,7 @@ const getInvoice = async (req, res) => {
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "Unknown",
-                projectName: inv.projectId?.projectName || "Unknown",
+                projectName: inv.projectIds?.map(p => p.projectName).join(" & ") || "Unknown",
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: inv.amount,
@@ -189,13 +198,13 @@ const getAllInvoice = async (req, res) => {
         const invoices = await invoiceModel
             .find()
             .populate("clientId")
-            .populate("projectId");
+            .populate("projectIds");
 
         const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "Unknown",
-                projectName: inv.projectId?.projectName || "Unknown",
+                projectName: (inv.projectIds?.map(p => p.projectName).join(" & ")) || "Unknown",
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: inv.amount,
@@ -224,7 +233,8 @@ const updateInvoice = async (req, res) => {
 
         const {
             clientId,
-            projectId: newProjectId,
+            projectIds: newProjectIds,
+            selectedDues,
             referenceNo,
             invoiceNo,
             amount: newAmount,
@@ -244,28 +254,30 @@ const updateInvoice = async (req, res) => {
         }
 
         // Validate amount if updated
-        const targetProjectId = newProjectId || invoice.projectId;
+        const targetProjectIds = newProjectIds || invoice.projectIds;
         const targetAmount = newAmount !== undefined ? Number(newAmount) : Number(invoice.amount);
 
-        if (newAmount !== undefined || newProjectId !== undefined) {
-            const project = await projectModel.findById(targetProjectId);
-            if (!project) {
-                return res.status(404).json({ message: "Project not found" });
+        if (newAmount !== undefined || newProjectIds !== undefined) {
+            const projects = await projectModel.find({ _id: { $in: targetProjectIds } });
+            if (projects.length === 0) {
+                return res.status(404).json({ message: "Projects not found" });
             }
 
-            const existingInvoices = await invoiceModel.find({ projectId: targetProjectId, _id: { $ne: id } });
+            let totalBudget = projects.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+            const existingInvoices = await invoiceModel.find({ projectIds: { $in: targetProjectIds }, _id: { $ne: id } });
             const totalPaid = existingInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
 
-            if (totalPaid + targetAmount > project.totalAmount) {
-                const remaining = project.totalAmount - totalPaid;
+            if (totalPaid + targetAmount > totalBudget) {
+                const remaining = totalBudget - totalPaid;
                 return res.status(400).json({
-                    message: `Update failed. Amount exceeds project budget. Remaining budget: ₹${remaining}`
+                    message: `Update failed. Amount exceeds combined project budget. Remaining budget: ₹${remaining}`
                 });
             }
         }
 
         invoice.clientId = clientId || invoice.clientId;
-        invoice.projectId = newProjectId || invoice.projectId;
+        invoice.projectIds = newProjectIds || invoice.projectIds;
+        invoice.selectedDues = selectedDues !== undefined ? selectedDues : invoice.selectedDues;
         invoice.referenceNo = referenceNo || invoice.referenceNo;
         invoice.invoiceNo = invoiceNo || invoice.invoiceNo;
         invoice.amount = newAmount !== undefined ? Number(newAmount) : invoice.amount;
@@ -280,17 +292,9 @@ const updateInvoice = async (req, res) => {
         // Populate and calculate financials for the response
         const populatedInvoice = await invoiceModel.findById(invoice._id)
             .populate("clientId")
-            .populate("projectId");
+            .populate("projectIds");
 
-        if (populatedInvoice.projectId && typeof populatedInvoice.projectId === 'object') {
-            const projectInvoices = await invoiceModel.find({ projectId: populatedInvoice.projectId._id });
-            const totalPaidProject = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-            populatedInvoice.projectId = {
-                ...populatedInvoice.projectId.toObject(),
-                totalPaid: totalPaidProject,
-                dueAmount: populatedInvoice.projectId.totalAmount - totalPaidProject
-            };
-        }
+        const projectNames = populatedInvoice.projectIds?.map(p => p.projectName).join(" & ") || "Unknown";
 
         res.status(200).json({
             message: "Invoice updated successfully",
@@ -298,7 +302,7 @@ const updateInvoice = async (req, res) => {
                 ...populatedInvoice.toObject(),
                 id: populatedInvoice._id,
                 number: populatedInvoice.invoiceNo,
-                total: populatedInvoice.amount,
+                projectName: projectNames,
                 grandTotal: populatedInvoice.amount + (populatedInvoice.previousDue || 0)
             }
         });
@@ -321,16 +325,16 @@ const deleteInvoice = async (req, res) => {
         }
 
         // For delete, return the updated project balance too
-        const project = await projectModel.findById(invoice.projectId);
-        let projectSummary = null;
-        if (project) {
-            const projectInvoices = await invoiceModel.find({ projectId: project._id });
+        const projects = await projectModel.find({ _id: { $in: invoice.projectIds } });
+        let projectsSummary = [];
+        for (const project of projects) {
+            const projectInvoices = await invoiceModel.find({ projectIds: project._id });
             const totalPaid = projectInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-            projectSummary = {
+            projectsSummary.push({
                 ...project.toObject(),
                 totalPaid,
                 dueAmount: project.totalAmount - totalPaid
-            };
+            });
         }
 
         // Calculate totalDue for the client (Sum of all projects' remaining budget)
@@ -347,7 +351,7 @@ const deleteInvoice = async (req, res) => {
         res.status(200).json({
             message: "Invoice deleted successfully",
             invoice,
-            project: projectSummary
+            projects: projectsSummary
         });
 
     } catch (error) {

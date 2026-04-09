@@ -63,7 +63,12 @@ const getAllClient = async (req, res) => {
             let totalDue = 0;
             // totalDue is the sum of (Project Total - Invoiced Amount) for all client projects
             for (const p of projects) {
-                const invoicesForProject = await invoiceModel.find({ projectId: p._id });
+                const invoicesForProject = await invoiceModel.find({ 
+                    $or: [
+                        { projectIds: p._id },
+                        { projectId: p._id }
+                    ] 
+                });
                 const totalInvoiced = invoicesForProject.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
                 totalDue += (Math.max(0, p.totalAmount - totalInvoiced));
             }

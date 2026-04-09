@@ -47,7 +47,12 @@ const getAllProjects = async (req, res) => {
 
         // Calculate paid and due amounts for each project
         const projectsWithFinancials = await Promise.all(projects.map(async (project) => {
-            const invoices = await invoiceModel.find({ projectId: project._id });
+            const invoices = await invoiceModel.find({ 
+                $or: [
+                    { projectIds: project._id },
+                    { projectId: project._id }
+                ] 
+            });
             const totalPaid = invoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
 
             return {

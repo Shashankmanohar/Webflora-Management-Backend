@@ -6,6 +6,10 @@ const invoiceSchema = new mongoose.Schema({
         ref: "client",
         required: true,
     },
+    projectId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "project",
+    },
     projectIds: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "project",

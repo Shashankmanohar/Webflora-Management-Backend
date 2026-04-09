@@ -20,9 +20,13 @@ const AddInvoice = async (req, res) => {
             items
         } = req.body;
 
-        if (!clientId || !projectIds || !Array.isArray(projectIds) || projectIds.length === 0 || !referenceNo || !amount || !method) {
+        if (!clientId || !projectIds || !Array.isArray(projectIds) || projectIds.length === 0 || !referenceNo || (!amount && (!items || items.length === 0)) || !method) {
             return res.status(400).json({ message: "Required fields are missing" });
         }
+
+        let calculatedAmount = items && items.length > 0 
+            ? items.reduce((sum, item) => sum + (Number(item.price) || 0), 0)
+            : Number(amount);
 
         let invNo = invoiceNo;
         if (!invNo) {
@@ -54,7 +58,7 @@ const AddInvoice = async (req, res) => {
         // exceeds the total budget of all these projects combined.
         const totalPaid = existingInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
 
-        if (totalPaid + Number(amount) > totalBudget) {
+        if (totalPaid + calculatedAmount > totalBudget) {
             const remaining = totalBudget - totalPaid;
             return res.status(400).json({
                 message: `Invoice amount exceeds the combined project budget. Remaining budget: ₹${remaining}`
@@ -65,10 +69,11 @@ const AddInvoice = async (req, res) => {
         // If selectedDues is provided, use only those projects
         // Otherwise, use all other projects of the client
         let dueQuery = { client: clientId };
-        if (selectedDues && Array.isArray(selectedDues) && selectedDues.length > 0) {
+        if (selectedDues && Array.isArray(selectedDues)) {
             dueQuery._id = { $in: selectedDues };
         } else {
-            dueQuery._id = { $nin: projectIds };
+            // Default to no dues if not explicitly provided as an array
+            dueQuery._id = { $in: [] }; 
         }
 
         const dueProjects = await projectModel.find(dueQuery);
@@ -88,13 +93,17 @@ const AddInvoice = async (req, res) => {
             }
         }
 
+        // Merge new projectIds and selectedDues into a single array for proper financial linking
+        const allAssociatedProjectIds = [...new Set([...projectIds, ...(selectedDues || [])])];
+
         const newInvoice = new invoiceModel({
             clientId,
-            projectIds,
+            projectId: projectIds && projectIds.length > 0 ? projectIds[0] : null,
+            projectIds: allAssociatedProjectIds,
             selectedDues: selectedDues || [],
             referenceNo,
             invoiceNo: invNo,
-            amount: Number(amount),
+            amount: calculatedAmount,
             description,
             method,
             items: items || [],
@@ -109,9 +118,12 @@ const AddInvoice = async (req, res) => {
         // Populate and calculate financials for the response
         const populatedInvoice = await invoiceModel.findById(newInvoice._id)
             .populate("clientId")
+            .populate("projectId")
             .populate("projectIds");
 
-        const projectNames = populatedInvoice.projectIds.map(p => p.projectName).join(" & ");
+        const projectNames = (populatedInvoice.projectIds && populatedInvoice.projectIds.length > 0)
+            ? populatedInvoice.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
+            : (populatedInvoice.projectId?.projectName || "Standard Project");
 
         res.status(201).json({
             message: "Invoice created successfully",
@@ -120,8 +132,8 @@ const AddInvoice = async (req, res) => {
                 id: populatedInvoice._id,
                 number: populatedInvoice.invoiceNo,
                 projectName: projectNames,
-                total: populatedInvoice.amount,
-                grandTotal: populatedInvoice.amount + (populatedInvoice.previousDue || 0)
+                total: Number(populatedInvoice.amount) || 0,
+                grandTotal: (Number(populatedInvoice.amount) || 0) + (Number(populatedInvoice.previousDue) || 0)
             }
         });
 
@@ -136,19 +148,24 @@ const getInvoicesByProject = async (req, res) => {
     try {
         const { projectId } = req.params;
         const invoices = await invoiceModel
-            .find({ projectIds: projectId })
+            .find({ $or: [{ projectIds: projectId }, { projectId: projectId }] })
             .populate("clientId")
+            .populate("projectId")
             .populate("projectIds");
 
         const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            const projectNames = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
+                : (inv.projectId?.projectName || "Standard Project");
+
             return {
                 ...inv.toObject(),
-                clientName: inv.clientId?.clientName || "Unknown",
-                projectName: inv.projectIds?.map(p => p.projectName).join(" & ") || "Unknown",
+                clientName: inv.clientId?.clientName || "General Client",
+                projectName: projectNames,
                 id: inv._id,
                 number: inv.invoiceNo,
-                total: inv.amount,
-                grandTotal: inv.amount + (inv.previousDue || 0)
+                total: Number(inv.amount) || 0,
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
             };
         }));
 
@@ -166,6 +183,7 @@ const getInvoice = async (req, res) => {
         const invoices = await invoiceModel
             .find({ referenceNo })
             .populate("clientId")
+            .populate("projectId")
             .populate("projectIds");
 
         if (!invoices || invoices.length === 0) {
@@ -173,14 +191,18 @@ const getInvoice = async (req, res) => {
         }
 
         const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            const projectNames = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
+                : (inv.projectId?.projectName || "Standard Project");
+
             return {
                 ...inv.toObject(),
-                clientName: inv.clientId?.clientName || "Unknown",
-                projectName: inv.projectIds?.map(p => p.projectName).join(" & ") || "Unknown",
+                clientName: inv.clientId?.clientName || "General Client",
+                projectName: projectNames,
                 id: inv._id,
                 number: inv.invoiceNo,
-                total: inv.amount,
-                grandTotal: inv.amount + (inv.previousDue || 0)
+                total: Number(inv.amount) || 0,
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
             };
         }));
 
@@ -198,21 +220,26 @@ const getAllInvoice = async (req, res) => {
         const invoices = await invoiceModel
             .find()
             .populate("clientId")
+            .populate("projectId")
             .populate("projectIds");
 
         const invoicesWithTotals = await Promise.all(invoices.map(async (inv) => {
+            const projectNames = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
+                : (inv.projectId?.projectName || "Standard Project");
+
             return {
                 ...inv.toObject(),
-                clientName: inv.clientId?.clientName || "Unknown",
-                projectName: (inv.projectIds?.map(p => p.projectName).join(" & ")) || "Unknown",
+                clientName: inv.clientId?.clientName || "General Client",
+                projectName: projectNames,
                 id: inv._id,
                 number: inv.invoiceNo,
-                total: inv.amount,
-                grandTotal: inv.amount + (inv.previousDue || 0)
+                total: Number(inv.amount) || 0,
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
             };
         }));
 
-        res.status(200).json({ invoice: invoicesWithTotals });
+        res.status(200).json({ invoices: invoicesWithTotals });
 
     } catch (error) {
         res.status(500).json({ message: "Failed to get invoices", error: error.message });
@@ -255,9 +282,12 @@ const updateInvoice = async (req, res) => {
 
         // Validate amount if updated
         const targetProjectIds = newProjectIds || invoice.projectIds;
-        const targetAmount = newAmount !== undefined ? Number(newAmount) : Number(invoice.amount);
+        const targetItems = items !== undefined ? items : invoice.items;
+        const targetAmount = targetItems && targetItems.length > 0
+            ? targetItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0)
+            : (newAmount !== undefined ? Number(newAmount) : Number(invoice.amount));
 
-        if (newAmount !== undefined || newProjectIds !== undefined) {
+        if (newAmount !== undefined || newProjectIds !== undefined || targetItems !== undefined) {
             const projects = await projectModel.find({ _id: { $in: targetProjectIds } });
             if (projects.length === 0) {
                 return res.status(404).json({ message: "Projects not found" });
@@ -275,26 +305,41 @@ const updateInvoice = async (req, res) => {
             }
         }
 
-        invoice.clientId = clientId || invoice.clientId;
-        invoice.projectIds = newProjectIds || invoice.projectIds;
-        invoice.selectedDues = selectedDues !== undefined ? selectedDues : invoice.selectedDues;
-        invoice.referenceNo = referenceNo || invoice.referenceNo;
-        invoice.invoiceNo = invoiceNo || invoice.invoiceNo;
-        invoice.amount = newAmount !== undefined ? Number(newAmount) : invoice.amount;
-        invoice.description = description !== undefined ? description : invoice.description;
-        invoice.method = method || invoice.method;
-        invoice.items = items !== undefined ? items : invoice.items;
-        invoice.date = date || invoice.date;
-        invoice.status = status || invoice.status;
+        const data = {
+            clientId: clientId || invoice.clientId,
+            selectedDues: selectedDues !== undefined ? selectedDues : invoice.selectedDues,
+            projectIds: [...new Set([...(newProjectIds || invoice.projectIds), ...(selectedDues !== undefined ? selectedDues : invoice.selectedDues || [])])],
+            referenceNo: referenceNo || invoice.referenceNo,
+            invoiceNo: invoiceNo || invoice.invoiceNo,
+            amount: targetAmount,
+            description: description !== undefined ? description : invoice.description,
+            method: method || invoice.method,
+            items: items !== undefined ? items : invoice.items,
+            date: date || invoice.date,
+            status: status || invoice.status
+        };
 
-        await invoice.save();
+        // Explicitly include all fields for update
+        const updateData = {
+            ...data,
+            projectId: data.projectIds && data.projectIds.length > 0 ? data.projectIds[0] : null
+        };
+
+        const updatedInvoice = await invoiceModel.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
 
         // Populate and calculate financials for the response
-        const populatedInvoice = await invoiceModel.findById(invoice._id)
+        const populatedInvoice = await invoiceModel.findById(updatedInvoice._id)
             .populate("clientId")
+            .populate("projectId")
             .populate("projectIds");
 
-        const projectNames = populatedInvoice.projectIds?.map(p => p.projectName).join(" & ") || "Unknown";
+        const projectNames = (populatedInvoice.projectIds && populatedInvoice.projectIds.length > 0)
+            ? populatedInvoice.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
+            : (populatedInvoice.projectId?.projectName || "Standard Project");
 
         res.status(200).json({
             message: "Invoice updated successfully",

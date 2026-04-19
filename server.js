@@ -17,6 +17,8 @@ import authRoutes from './route/authRoute.js';
 import reportRoutes from './route/reportRoute.js';
 import activityRoutes from './route/activityRoute.js';
 import expenseRoutes from './route/expenseRoute.js';
+import leadRoutes from './route/leadRoute.js';
+import quotationRoutes from './route/quotationRoute.js';
 dotenv.config();
 
 const app = express();
@@ -49,6 +51,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/report', reportRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/expense', expenseRoutes);
+app.use('/api/lead', leadRoutes);
+app.use('/api/quotation', quotationRoutes);
 
 
 // Connect to MongoDB

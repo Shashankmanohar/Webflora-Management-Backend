@@ -1,5 +1,5 @@
 import express from 'express';
-import { createExpense, getExpenses, deleteExpense } from '../controller/expenseController.js';
+import { createExpense, getExpenses, deleteExpense, updateReturnStatus } from '../controller/expenseController.js';
 import authMiddleware from '../middleware/auth.js';
 
 import { upload } from '../middleware/upload.js';
@@ -12,6 +12,7 @@ const adminOnly = ['admin'];
 
 router.post('/add', authMiddleware(allRoles), upload.single('receipt'), createExpense);
 router.get('/all', authMiddleware(allRoles), getExpenses);
+router.patch('/:id/return-status', authMiddleware(adminOnly), updateReturnStatus);
 router.delete('/:id', authMiddleware(adminOnly), deleteExpense);
 
 export default router;

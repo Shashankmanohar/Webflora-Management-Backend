@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import adminRoutes from './route/adminRoute.js';
@@ -27,7 +28,7 @@ const app = express();
 app.use(cors({
     origin: ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app'],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());

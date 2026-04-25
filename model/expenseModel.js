@@ -23,6 +23,19 @@ const expenseSchema = new mongoose.Schema({
         required: [true, "Expense type is required"],
         enum: ["Self Spent", "Sent to Employee", "Sent to Intern", "Company Expense"],
     },
+    moneySource: {
+        type: String,
+        required: [true, "Money source is required"],
+        enum: ["Own Money", "Company Money"],
+    },
+    returnStatus: {
+        type: String,
+        enum: ["Pending", "Returned"],
+        default: "Pending",
+    },
+    returnDate: {
+        type: Date,
+    },
     recipientId: {
         type: mongoose.Schema.Types.ObjectId,
         refPath: 'recipientModel',

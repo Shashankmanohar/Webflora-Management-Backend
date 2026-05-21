@@ -20,6 +20,7 @@ import activityRoutes from './route/activityRoute.js';
 import expenseRoutes from './route/expenseRoute.js';
 import leadRoutes from './route/leadRoute.js';
 import quotationRoutes from './route/quotationRoute.js';
+import agreementRoutes from './route/agreementRoute.js';
 dotenv.config();
 
 const app = express();
@@ -54,6 +55,7 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/expense', expenseRoutes);
 app.use('/api/lead', leadRoutes);
 app.use('/api/quotation', quotationRoutes);
+app.use('/api/agreement', agreementRoutes);
 
 
 // Connect to MongoDB

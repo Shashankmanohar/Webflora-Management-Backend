@@ -5,7 +5,11 @@ import Counter from "../model/counterModel.js";
 // Create a new quotation
 const createQuotation = async (req, res) => {
     try {
-        const { leadId, date, validUntil, items, totalAmount, notes, status, quotationNo } = req.body;
+        const {
+            leadId, date, validUntil, items, totalAmount, notes, status, quotationNo,
+            projectName, projectType, projectOverview, scopeOfWork, websitePages,
+            adminPanelFeatures, timeline, deliverables, paymentTerms, additionalServices, termsAndConditions
+        } = req.body;
         const adminId = req.user.id;
 
         if (!leadId || !totalAmount) {
@@ -33,8 +37,19 @@ const createQuotation = async (req, res) => {
             quotationNo: qNo,
             date,
             validUntil,
+            projectName,
+            projectType,
+            projectOverview,
+            scopeOfWork,
+            websitePages: websitePages || [],
+            adminPanelFeatures: adminPanelFeatures || [],
             items: items || [],
             totalAmount,
+            timeline: timeline || [],
+            deliverables: deliverables || [],
+            paymentTerms: paymentTerms || [],
+            additionalServices: additionalServices || [],
+            termsAndConditions: termsAndConditions || [],
             notes,
             status: status || "Draft",
             adminId

@@ -18,6 +18,30 @@ const quotationSchema = new mongoose.Schema({
     validUntil: {
         type: Date,
     },
+    projectName: {
+        type: String,
+        default: "",
+    },
+    projectType: {
+        type: String,
+        default: "Website Development",
+    },
+    projectOverview: {
+        type: String,
+        default: "",
+    },
+    scopeOfWork: {
+        type: String,
+        default: "",
+    },
+    websitePages: [{
+        page: { type: String, required: true },
+        included: { type: Boolean, default: true }
+    }],
+    adminPanelFeatures: [{
+        feature: { type: String, required: true },
+        included: { type: Boolean, default: true }
+    }],
     items: [{
         service: String,
         description: String,
@@ -29,6 +53,23 @@ const quotationSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
+    timeline: [{
+        stage: String,
+        days: Number
+    }],
+    deliverables: [{
+        type: String
+    }],
+    paymentTerms: [{
+        type: String
+    }],
+    additionalServices: [{
+        service: String,
+        price: Number
+    }],
+    termsAndConditions: [{
+        type: String
+    }],
     status: {
         type: String,
         enum: ["Draft", "Sent", "Accepted", "Rejected", "Expired"],

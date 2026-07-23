@@ -47,7 +47,8 @@ const quotationSchema = new mongoose.Schema({
         description: String,
         quantity: Number,
         price: Number,
-        amount: Number
+        amount: Number,
+        isMonthly: { type: Boolean, default: false }
     }],
     totalAmount: {
         type: Number,
@@ -65,7 +66,8 @@ const quotationSchema = new mongoose.Schema({
     }],
     additionalServices: [{
         service: String,
-        price: Number
+        price: Number,
+        isMonthly: { type: Boolean, default: false }
     }],
     termsAndConditions: [{
         type: String

@@ -27,7 +27,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app'],
+    origin: ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app', 'https://crm.webfloratechnologies.com'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']

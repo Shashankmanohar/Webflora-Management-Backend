@@ -26,8 +26,31 @@ dotenv.config();
 const app = express();
 
 // Middleware
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app', 'https://crm.webfloratechnologies.com'];
+
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:8080', 'https://webflora-management-frontend.vercel.app', 'https://crm.webfloratechnologies.com'],
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, origin);
+        }
+        return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Explicit preflight handler for all routes
+app.options('*', cors({
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, origin);
+        }
+        return callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization']

@@ -89,7 +89,11 @@ const unifiedLogin = async (req, res) => {
     }
 };
 
-// Helper to create transporter only when needed
+import fs from "fs";
+
+// Singleton cached transporter
+let cachedTransporter = null;
+
 const getTransporter = () => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
@@ -99,21 +103,32 @@ const getTransporter = () => {
         return null;
     }
 
-    return nodemailer.createTransport({
-        service: "gmail",
-        auth: { user, pass },
-    });
+    if (!cachedTransporter) {
+        cachedTransporter = nodemailer.createTransport({
+            host: "smtp.gmail.com",
+            port: 465,
+            secure: true,
+            auth: { user, pass },
+            pool: true,
+            maxConnections: 5,
+            maxMessages: 100
+        });
+    }
+
+    return cachedTransporter;
 };
 
 // Forgot Password - Send OTP
 const forgotPassword = async (req, res) => {
     console.log("Forgot Password Request Received:", req.body);
     try {
-        const { email, role } = req.body;
+        const { email: rawEmail, role } = req.body;
 
-        if (!email || !role) {
+        if (!rawEmail || !role) {
             return res.status(400).json({ message: "Email and role are required" });
         }
+
+        const email = rawEmail.toLowerCase().trim();
 
         // Validate if user exists based on role
         let user;
@@ -142,21 +157,33 @@ const forgotPassword = async (req, res) => {
             return res.status(500).json({ message: "Failed to save verification code. Please try again." });
         }
 
-        // Send Email Fallback for Dev
-        console.log(`[DEV] OTP code for ${email}: ${otp}`);
+        console.log(`[OTP GENERATED] Code for ${email} (${role}): ${otp}`);
 
         const transporter = getTransporter();
 
         if (!transporter) {
             console.warn("WARNING: Email service not configured. OTP logged to console above.");
             return res.status(200).json({
-                message: "OTP generated (check server console)",
+                message: "OTP generated (Check server console: email service not configured)",
                 dev_note: "Email service not configured in .env"
             });
         }
 
         const logoPath = path.join(__dirname, "../../frontend/public/webfloralogo.png");
-        const blackLogoPath = path.join(__dirname, "../../frontend/public/Blacktextlogo.jpeg");
+        const hasLocalLogo = fs.existsSync(logoPath);
+
+        const mailAttachments = [];
+        if (hasLocalLogo) {
+            mailAttachments.push({
+                filename: 'webfloralogo.png',
+                path: logoPath,
+                cid: 'webfloralogo'
+            });
+        }
+
+        const logoHtml = hasLocalLogo 
+            ? '<img src="cid:webfloralogo" alt="Webflora Logo" style="max-height: 50px; width: auto; margin-bottom: 15px;">'
+            : '<img src="https://crm.webfloratechnologies.com/webfloralogo.png" alt="Webflora Logo" style="max-height: 50px; width: auto; margin-bottom: 15px;">';
 
         const mailOptions = {
             from: `"Webflora Support" <${process.env.EMAIL_USER}>`,
@@ -165,7 +192,7 @@ const forgotPassword = async (req, res) => {
             html: `
                 <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; color: #333;">
                     <div style="background-color: #0f172a; padding: 30px; text-align: center; border-bottom: 2px solid #ff4e1b;">
-                        <img src="cid:webfloralogo" alt="Webflora Logo" style="max-height: 50px; width: auto; margin-bottom: 15px;">
+                        ${logoHtml}
                         <h2 style="margin: 0; color: #ffffff; font-size: 24px;">Verification Code</h2>
                     </div>
                     <div style="padding: 40px 30px; background-color: #ffffff; text-align: center;">
@@ -186,37 +213,32 @@ const forgotPassword = async (req, res) => {
                     </div>
                 </div>
             `,
-            attachments: [
-                {
-                    filename: 'webfloralogo.png',
-                    path: logoPath,
-                    cid: 'webfloralogo'
-                }
-            ]
+            attachments: mailAttachments
         };
 
         try {
             await transporter.sendMail(mailOptions);
-            res.status(200).json({ message: "OTP sent successfully to your email" });
+            return res.status(200).json({ message: "OTP sent successfully to your email" });
         } catch (mailError) {
             console.error("Nodemailer Error:", mailError);
-            res.status(200).json({
-                message: "OTP generated but email failed to send (check console)",
-                error: mailError.message
+            return res.status(500).json({
+                message: "Failed to send OTP to your email: " + (mailError.message || "Email service error")
             });
         }
 
     } catch (error) {
         console.error("Critical Forgot Password Error:", error);
-        res.status(500).json({ message: "Internal server error", error: error.message });
+        return res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
 
 // Verify OTP
 const verifyOTP = async (req, res) => {
     try {
-        const { email, otp, role } = req.body;
-        if (!email || !otp || !role) return res.status(400).json({ message: "All fields are required" });
+        const { email: rawEmail, otp, role } = req.body;
+        if (!rawEmail || !otp || !role) return res.status(400).json({ message: "All fields are required" });
+
+        const email = rawEmail.toLowerCase().trim();
 
         const otpRecord = await OTP.findOne({ email, role });
         if (!otpRecord) return res.status(400).json({ message: "Invalid code or request expired" });
@@ -226,10 +248,10 @@ const verifyOTP = async (req, res) => {
             return res.status(400).json({ message: "Code has expired" });
         }
 
-        if (otpRecord.otp !== otp) {
+        if (otpRecord.otp !== otp.trim()) {
             otpRecord.attempts = (otpRecord.attempts || 0) + 1;
             await otpRecord.save();
-            if (otpRecord.attempts >= 3) {
+            if (otpRecord.attempts >= 5) {
                 await OTP.deleteOne({ _id: otpRecord._id });
                 return res.status(400).json({ message: "Too many failed attempts. Try again later." });
             }
@@ -245,12 +267,14 @@ const verifyOTP = async (req, res) => {
 // Reset Password
 const resetPassword = async (req, res) => {
     try {
-        const { email, role, newPassword, otp } = req.body;
-        if (!email || !role || !newPassword || !otp) return res.status(400).json({ message: "All fields are required" });
+        const { email: rawEmail, role, newPassword, otp } = req.body;
+        if (!rawEmail || !role || !newPassword || !otp) return res.status(400).json({ message: "All fields are required" });
 
-        const otpRecord = await OTP.findOne({ email, role, otp });
+        const email = rawEmail.toLowerCase().trim();
+
+        const otpRecord = await OTP.findOne({ email, role, otp: otp.trim() });
         if (!otpRecord || otpRecord.expiresAt < new Date()) {
-            return res.status(400).json({ message: "Invalid session. Please start over." });
+            return res.status(400).json({ message: "Invalid session or OTP expired. Please start over." });
         }
 
         const salt = await bcrypt.genSalt(10);

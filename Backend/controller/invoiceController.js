@@ -158,6 +158,24 @@ const getInvoicesByProject = async (req, res) => {
                 ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
                 : (inv.projectId?.projectName || "Standard Project");
 
+            const allLinkedProjects = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds
+                : (inv.projectId ? [inv.projectId] : []);
+
+            let projectTotal = 0;
+            let projectDue = 0;
+
+            for (const p of allLinkedProjects) {
+                const pBudget = Number(p.totalAmount) || 0;
+                projectTotal += pBudget;
+                // Calculate all payments on this project
+                const pInvoices = await invoiceModel.find({ 
+                    $or: [{ projectIds: p._id }, { projectId: p._id }] 
+                });
+                const pPaid = pInvoices.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                projectDue += Math.max(0, pBudget - pPaid);
+            }
+
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "General Client",
@@ -165,7 +183,9 @@ const getInvoicesByProject = async (req, res) => {
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: Number(inv.amount) || 0,
-                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0),
+                projectTotal: projectTotal > 0 ? projectTotal : Number(inv.amount) || 0,
+                projectDue: projectDue
             };
         }));
 
@@ -195,6 +215,23 @@ const getInvoice = async (req, res) => {
                 ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
                 : (inv.projectId?.projectName || "Standard Project");
 
+            const allLinkedProjects = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds
+                : (inv.projectId ? [inv.projectId] : []);
+
+            let projectTotal = 0;
+            let projectDue = 0;
+
+            for (const p of allLinkedProjects) {
+                const pBudget = Number(p.totalAmount) || 0;
+                projectTotal += pBudget;
+                const pInvoices = await invoiceModel.find({ 
+                    $or: [{ projectIds: p._id }, { projectId: p._id }] 
+                });
+                const pPaid = pInvoices.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                projectDue += Math.max(0, pBudget - pPaid);
+            }
+
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "General Client",
@@ -202,7 +239,9 @@ const getInvoice = async (req, res) => {
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: Number(inv.amount) || 0,
-                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0),
+                projectTotal: projectTotal > 0 ? projectTotal : Number(inv.amount) || 0,
+                projectDue: projectDue
             };
         }));
 
@@ -228,6 +267,23 @@ const getAllInvoice = async (req, res) => {
                 ? inv.projectIds.map(p => p.projectName || "Standard Project").join(" & ")
                 : (inv.projectId?.projectName || "Standard Project");
 
+            const allLinkedProjects = (inv.projectIds && inv.projectIds.length > 0)
+                ? inv.projectIds
+                : (inv.projectId ? [inv.projectId] : []);
+
+            let projectTotal = 0;
+            let projectDue = 0;
+
+            for (const p of allLinkedProjects) {
+                const pBudget = Number(p.totalAmount) || 0;
+                projectTotal += pBudget;
+                const pInvoices = await invoiceModel.find({ 
+                    $or: [{ projectIds: p._id }, { projectId: p._id }] 
+                });
+                const pPaid = pInvoices.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                projectDue += Math.max(0, pBudget - pPaid);
+            }
+
             return {
                 ...inv.toObject(),
                 clientName: inv.clientId?.clientName || "General Client",
@@ -235,7 +291,9 @@ const getAllInvoice = async (req, res) => {
                 id: inv._id,
                 number: inv.invoiceNo,
                 total: Number(inv.amount) || 0,
-                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0)
+                grandTotal: (Number(inv.amount) || 0) + (Number(inv.previousDue) || 0),
+                projectTotal: projectTotal > 0 ? projectTotal : Number(inv.amount) || 0,
+                projectDue: projectDue
             };
         }));
 
@@ -305,10 +363,32 @@ const updateInvoice = async (req, res) => {
             }
         }
 
+        // Calculate previous due for the client if selectedDues is provided
+        const targetClientId = clientId || invoice.clientId;
+        const targetSelectedDues = selectedDues !== undefined ? selectedDues : (invoice.selectedDues || []);
+        
+        let totalClientDue = 0;
+        let dueBreakdown = [];
+        if (targetSelectedDues && Array.isArray(targetSelectedDues) && targetSelectedDues.length > 0) {
+            const dueProjects = await projectModel.find({ client: targetClientId, _id: { $in: targetSelectedDues } });
+            for (const p of dueProjects) {
+                const projectInvoices = await invoiceModel.find({ projectIds: p._id, _id: { $ne: id } });
+                const totalInvoiced = projectInvoices.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+                const remaining = Math.max(0, p.totalAmount - totalInvoiced);
+                if (remaining > 0) {
+                    totalClientDue += remaining;
+                    dueBreakdown.push({
+                        projectName: p.projectName,
+                        amount: remaining
+                    });
+                }
+            }
+        }
+
         const data = {
-            clientId: clientId || invoice.clientId,
-            selectedDues: selectedDues !== undefined ? selectedDues : invoice.selectedDues,
-            projectIds: [...new Set([...(newProjectIds || invoice.projectIds), ...(selectedDues !== undefined ? selectedDues : invoice.selectedDues || [])])],
+            clientId: targetClientId,
+            selectedDues: targetSelectedDues,
+            projectIds: [...new Set([...(newProjectIds || invoice.projectIds), ...targetSelectedDues])],
             referenceNo: referenceNo || invoice.referenceNo,
             invoiceNo: invoiceNo || invoice.invoiceNo,
             amount: targetAmount,
@@ -316,7 +396,9 @@ const updateInvoice = async (req, res) => {
             method: method || invoice.method,
             items: items !== undefined ? items : invoice.items,
             date: date || invoice.date,
-            status: status || invoice.status
+            status: status || invoice.status,
+            previousDue: totalClientDue,
+            dueBreakdown: dueBreakdown
         };
 
         // Explicitly include all fields for update
